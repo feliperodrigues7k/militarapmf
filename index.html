@@ -196,7 +196,7 @@
             </div>
         </div>
         <div class="flex items-center gap-2">
-            <button id="install-btn" class="btn bg-brand-500 hover:bg-brand-600 border-none text-white text-xs no-print hidden shadow-sm px-3 w-auto flex-shrink-0">
+            <button id="install-btn" class="btn bg-brand-500 hover:bg-brand-600 border-none text-white text-xs no-print flex shadow-sm px-3 w-auto flex-shrink-0">
                 <i class="fa-solid fa-download"></i>
                 <span class="hidden sm:inline ml-1">Instalar</span>
             </button>
@@ -1515,30 +1515,38 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevent default prompt
     e.preventDefault();
     deferredPrompt = e;
-    const btn = document.getElementById('install-btn');
-    btn.classList.remove('hidden');
-    btn.classList.add('flex');
 });
+
+// Hide install button if already in PWA / Standalone mode
+if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+    const btn = document.getElementById('install-btn');
+    if(btn) btn.style.display = 'none';
+}
 
 document.getElementById('install-btn').addEventListener('click', async () => {
     if (deferredPrompt) {
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
         if (outcome === 'accepted') {
-            const btn = document.getElementById('install-btn');
-            btn.classList.add('hidden');
-            btn.classList.remove('flex');
+            document.getElementById('install-btn').style.display = 'none';
         }
         deferredPrompt = null;
+    } else {
+        // Fallback or iOS instructions
+        const isIos = /iphone|ipad|ipod/.test(window.navigator.userAgent.toLowerCase());
+        if (isIos) {
+            showToast('Para instalar no iOS: toque em Compartilhar e depois "Adicionar à Tela de Início"', 'info');
+        } else {
+            showToast('Para instalar: Adicione à Tela Inicial pelo menu do seu navegador.', 'info');
+        }
     }
 });
 
 window.addEventListener('appinstalled', () => {
-    const btn = document.getElementById('install-btn');
-    btn.classList.add('hidden');
-    btn.classList.remove('flex');
+    document.getElementById('install-btn').style.display = 'none';
     deferredPrompt = null;
     showToast('Aplicativo instalado com sucesso!', 'success');
 });
