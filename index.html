@@ -196,6 +196,10 @@
             </div>
         </div>
         <div class="flex items-center gap-2">
+            <button id="install-btn" class="btn bg-brand-500 hover:bg-brand-600 border-none text-white text-xs no-print hidden shadow-sm px-3 w-auto flex-shrink-0">
+                <i class="fa-solid fa-download"></i>
+                <span class="hidden sm:inline ml-1">Instalar</span>
+            </button>
             <button id="edit-toggle-btn" onclick="toggleEditMode()" class="btn btn-ghost no-print text-xs">
                 <i class="fa-solid fa-pen-to-square"></i>
                 <span id="edit-btn-label">Editar</span>
@@ -1507,6 +1511,36 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('modal-overlay').addEventListener('click', e => {
         if (e.target === document.getElementById('modal-overlay')) closeModal();
     });
+});
+
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    const btn = document.getElementById('install-btn');
+    btn.classList.remove('hidden');
+    btn.classList.add('flex');
+});
+
+document.getElementById('install-btn').addEventListener('click', async () => {
+    if (deferredPrompt) {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+            const btn = document.getElementById('install-btn');
+            btn.classList.add('hidden');
+            btn.classList.remove('flex');
+        }
+        deferredPrompt = null;
+    }
+});
+
+window.addEventListener('appinstalled', () => {
+    const btn = document.getElementById('install-btn');
+    btn.classList.add('hidden');
+    btn.classList.remove('flex');
+    deferredPrompt = null;
+    showToast('Aplicativo instalado com sucesso!', 'success');
 });
 
 if ('serviceWorker' in navigator) {
