@@ -1,0 +1,1438 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerência de TI — APMF / CPMGAS</title>
+    <meta name="description" content="Sistema de gerenciamento de informações de TI — APMF / CPMGAS. Servidores, redes, CFTV, inventário e procedimentos.">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        dark: { bg: '#0b1120', surface: '#151f32', border: '#1e2d45', text: '#f0f4ff', muted: '#8899b4' },
+                        brand: { 400: '#60a5fa', 500: '#3b82f6', 600: '#2563eb' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeSlide 0.25s ease forwards; }
+        @keyframes fadeSlide { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+        .editable { cursor: text; transition: background 0.15s; border-radius: 4px; min-width: 40px; display: inline-block; }
+        .edit-mode .editable { background: rgba(59,130,246,0.08); outline: 1.5px dashed #3b82f6; padding: 2px 6px; border-radius: 4px; }
+        .edit-mode .editable:focus { background: rgba(59,130,246,0.15); outline: 2px solid #3b82f6; }
+
+        .editable-inline { border-radius: 3px; }
+        .edit-mode .editable-inline { background: rgba(59,130,246,0.06); outline: 1px dashed rgba(59,130,246,0.5); padding: 1px 4px; }
+        .edit-mode .editable-inline:focus { background: rgba(59,130,246,0.12); outline: 1.5px solid #3b82f6; }
+
+        @media print {
+            body { background: white !important; color: black !important; }
+            #sidebar, header, .no-print { display: none !important; }
+            main { padding: 0 !important; overflow: visible !important; }
+            #main-content { margin: 0 !important; overflow: visible !important; }
+            .tab-content { display: block !important; page-break-after: always; }
+            .tab-content:last-child { page-break-after: auto; }
+            input[type="password"] { -webkit-text-security: none !important; }
+            input[type="text"], input[type="password"] { border: none !important; background: transparent !important; }
+            table { border-collapse: collapse; width: 100%; font-size: 11px; }
+            th, td { border: 1px solid #cbd5e1; padding: 6px 10px; text-align: left; }
+            th { background: #f1f5f9 !important; font-weight: 600; }
+        }
+
+        tbody tr { transition: background 0.1s; }
+        tbody tr:hover { background: rgba(59,130,246,0.035) !important; }
+        .nav-active { background: rgba(59,130,246,0.12) !important; color: #60a5fa !important; }
+
+        #modal-overlay { display: none; }
+        #modal-overlay.open { display: flex; }
+
+        #edit-bar { transform: translateY(100px); opacity: 0; transition: all 0.3s cubic-bezier(.4,0,.2,1); pointer-events: none; }
+        #edit-bar.visible { transform: translateY(0); opacity: 1; pointer-events: all; }
+
+        .input-field { background: rgba(30,45,69,0.8); border: 1px solid #1e2d45; border-radius: 6px; padding: 6px 10px; font-size: 13px; color: #f0f4ff; outline: none; width: 100%; transition: border-color 0.2s; }
+        .input-field:focus { border-color: #3b82f6; }
+
+        .btn { padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+        .btn-primary { background: #2563eb; color: white; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-ghost { background: transparent; color: #8899b4; border: 1px solid #1e2d45; }
+        .btn-ghost:hover { background: rgba(30,45,69,0.8); color: #f0f4ff; }
+        .btn-danger { background: transparent; color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
+        .btn-danger:hover { background: rgba(248,113,113,0.1); }
+        .btn-success { background: #059669; color: white; }
+        .btn-success:hover { background: #047857; }
+        .btn-print { background: #7c3aed; color: white; }
+        .btn-print:hover { background: #6d28d9; }
+        .btn-export { background: transparent; color: #10b981; border: 1px solid rgba(16,185,129,0.3); font-size: 11px; padding: 4px 10px; }
+        .btn-export:hover { background: rgba(16,185,129,0.1); }
+
+        /* Sync dot animation */
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .sync-saving { animation: pulse-dot 0.8s ease infinite; }
+
+        /* Warning card flash */
+        @keyframes flash-warn { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+        /* Activity log */
+        .log-item { border-left: 2px solid #1e2d45; padding-left: 10px; }
+
+        /* Nav badge */
+        .nav-badge { background: #ef4444; color: white; font-size: 10px; font-weight: 700; border-radius: 9999px; padding: 1px 6px; margin-left: auto; }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-dark-bg text-gray-800 dark:text-dark-text font-sans flex h-screen overflow-hidden">
+
+<!-- Mobile Overlay -->
+<div id="mobile-overlay" class="fixed inset-0 bg-black/60 z-20 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+<!-- ============ SIDEBAR ============ -->
+<aside id="sidebar" class="bg-white dark:bg-dark-surface border-r border-gray-200 dark:border-dark-border w-64 flex-shrink-0 flex flex-col absolute lg:static inset-y-0 transform -translate-x-full lg:translate-x-0 transition-transform duration-300 z-30">
+    <div class="h-16 flex items-center px-5 border-b border-gray-200 dark:border-dark-border gap-3">
+        <div class="w-9 h-9 rounded-xl bg-brand-600 flex items-center justify-center flex-shrink-0">
+            <i class="fa-solid fa-server text-white text-sm"></i>
+        </div>
+        <div>
+            <p class="font-bold text-sm text-gray-900 dark:text-white leading-tight">Gerência TI</p>
+            <p class="text-[11px] text-gray-500 dark:text-dark-muted">APMF / CPMGAS</p>
+        </div>
+        <button class="ml-auto lg:hidden text-gray-400 hover:text-gray-700 dark:hover:text-white" onclick="toggleSidebar()">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
+        <p class="text-[10px] font-semibold text-gray-400 dark:text-dark-muted uppercase tracking-wider px-2 mb-2 mt-1">Infraestrutura</p>
+        <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-btn nav-active w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors">
+            <i class="fa-solid fa-gauge-high w-4 text-center"></i> Dashboard
+        </button>
+        <button onclick="switchTab('servidores')" id="nav-servidores" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-gray-600 dark:text-dark-muted hover:bg-gray-100 dark:hover:bg-dark-border/50">
+            <i class="fa-solid fa-network-wired w-4 text-center"></i> Servidores / VM
+            <span id="badge-servidores" class="nav-badge hidden"></span>
+        </button>
+        <button onclick="switchTab('redes')" id="nav-redes" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-gray-600 dark:text-dark-muted hover:bg-gray-100 dark:hover:bg-dark-border/50">
+            <i class="fa-solid fa-wifi w-4 text-center"></i> Redes & Wi-Fi
+        </button>
+        <button onclick="switchTab('sistemas')" id="nav-sistemas" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-gray-600 dark:text-dark-muted hover:bg-gray-100 dark:hover:bg-dark-border/50">
+            <i class="fa-solid fa-video w-4 text-center"></i> Sistemas / CFTV
+        </button>
+        <button onclick="switchTab('inventario')" id="nav-inventario" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-gray-600 dark:text-dark-muted hover:bg-gray-100 dark:hover:bg-dark-border/50">
+            <i class="fa-solid fa-boxes-stacked w-4 text-center"></i> Inventário
+        </button>
+        <button onclick="switchTab('procedimentos')" id="nav-procedimentos" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-gray-600 dark:text-dark-muted hover:bg-gray-100 dark:hover:bg-dark-border/50">
+            <i class="fa-solid fa-book w-4 text-center"></i> Procedimentos
+        </button>
+
+        <p class="text-[10px] font-semibold text-gray-400 dark:text-dark-muted uppercase tracking-wider px-2 mb-2 mt-4">Gestão</p>
+        <button onclick="switchTab('contatos')" id="nav-contatos" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-gray-600 dark:text-dark-muted hover:bg-gray-100 dark:hover:bg-dark-border/50">
+            <i class="fa-solid fa-address-book w-4 text-center"></i> Contatos & Emails
+        </button>
+    </nav>
+
+    <!-- Sync indicator -->
+    <div class="p-4 border-t border-gray-200 dark:border-dark-border space-y-2">
+        <div class="flex items-center gap-2 text-xs">
+            <span id="sync-dot" class="w-2 h-2 rounded-full bg-gray-400 flex-shrink-0 transition-colors duration-300"></span>
+            <span id="sync-text" class="text-gray-400 dark:text-dark-muted truncate">Aguardando sync…</span>
+        </div>
+        <p class="text-[10px] text-gray-400 dark:text-dark-muted" id="sync-time"></p>
+        <p class="text-[10px] text-gray-400 dark:text-dark-muted">Ctrl+S para salvar</p>
+    </div>
+</aside>
+
+<!-- ============ MAIN ============ -->
+<div class="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+    <!-- Header -->
+    <header class="h-14 flex items-center justify-between px-4 sm:px-6 bg-white/90 dark:bg-dark-surface/90 backdrop-blur border-b border-gray-200 dark:border-dark-border z-10 sticky top-0 no-print">
+        <div class="flex items-center gap-3">
+            <button class="lg:hidden text-gray-500 hover:text-gray-900 dark:hover:text-white" onclick="toggleSidebar()">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+            <div class="hidden sm:flex items-center bg-gray-100 dark:bg-dark-border/70 rounded-lg px-3 py-1.5 gap-2">
+                <i class="fa-solid fa-search text-gray-400 text-xs"></i>
+                <input id="search-input" type="text" placeholder="Buscar em toda a documentação…" oninput="globalSearch(this.value)"
+                    class="bg-transparent border-none outline-none text-sm w-52 text-gray-700 dark:text-dark-text placeholder-gray-400 dark:placeholder-dark-muted">
+                <span id="search-count" class="text-[10px] text-gray-400 hidden"></span>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <button id="edit-toggle-btn" onclick="toggleEditMode()" class="btn btn-ghost no-print text-xs">
+                <i class="fa-solid fa-pen-to-square"></i>
+                <span id="edit-btn-label">Editar</span>
+            </button>
+            <button onclick="printPage()" class="btn btn-print no-print text-xs">
+                <i class="fa-solid fa-print"></i> Imprimir
+            </button>
+            <button onclick="toggleDarkMode()" class="w-8 h-8 rounded-lg bg-gray-100 dark:bg-dark-border flex items-center justify-center text-gray-500 dark:text-dark-muted hover:bg-gray-200 dark:hover:bg-slate-700 transition no-print">
+                <i id="theme-icon" class="fa-solid fa-moon text-sm"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Edit Mode Bar -->
+    <div id="edit-bar" class="no-print fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-dark-surface border border-dark-border shadow-2xl rounded-2xl px-5 py-3 flex items-center gap-4">
+        <div class="flex items-center gap-2 text-emerald-400">
+            <i class="fa-solid fa-circle-dot animate-pulse text-xs"></i>
+            <span class="text-sm font-medium">Modo Edição</span>
+        </div>
+        <div class="w-px h-5 bg-dark-border"></div>
+        <span class="text-xs text-dark-muted">Clique em qualquer campo para editar</span>
+        <div class="w-px h-5 bg-dark-border"></div>
+        <button onclick="saveAllData()" class="btn btn-success text-xs py-1.5">
+            <i class="fa-solid fa-floppy-disk"></i> Salvar (Ctrl+S)
+        </button>
+        <button onclick="toggleEditMode()" class="btn btn-danger text-xs py-1.5">
+            <i class="fa-solid fa-xmark"></i> Sair
+        </button>
+    </div>
+
+    <!-- Content -->
+    <main id="main-content" class="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
+    <div class="max-w-6xl mx-auto space-y-8">
+
+    <!-- ===== TAB: DASHBOARD ===== -->
+    <div id="dashboard" class="tab-content active">
+        <div class="mb-6">
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Dashboard — Gerência de TI</h1>
+            <p class="text-gray-500 dark:text-dark-muted mt-1 text-sm">Repositório central APMF / CPMGAS. Clique em <strong>Editar</strong> para atualizar qualquer informação.</p>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-6">
+            <div class="bg-white dark:bg-dark-surface rounded-xl p-4 border border-gray-200 dark:border-dark-border shadow-sm cursor-pointer hover:border-brand-500 transition" onclick="switchTab('servidores')">
+                <div class="text-2xl font-bold text-brand-500 mb-1" id="stat-servers">—</div>
+                <div class="text-xs text-gray-500 dark:text-dark-muted">Servidores / VMs</div>
+            </div>
+            <div class="bg-white dark:bg-dark-surface rounded-xl p-4 border border-gray-200 dark:border-dark-border shadow-sm cursor-pointer hover:border-emerald-500 transition" onclick="switchTab('redes')">
+                <div class="text-2xl font-bold text-emerald-500 mb-1" id="stat-networks">—</div>
+                <div class="text-xs text-gray-500 dark:text-dark-muted">Redes Wi-Fi</div>
+            </div>
+            <div class="bg-white dark:bg-dark-surface rounded-xl p-4 border border-gray-200 dark:border-dark-border shadow-sm cursor-pointer hover:border-purple-500 transition" onclick="switchTab('sistemas')">
+                <div class="text-2xl font-bold text-purple-500 mb-1" id="stat-dvrs">—</div>
+                <div class="text-xs text-gray-500 dark:text-dark-muted">DVRs CFTV</div>
+            </div>
+            <div class="bg-white dark:bg-dark-surface rounded-xl p-4 border border-gray-200 dark:border-dark-border shadow-sm cursor-pointer hover:border-yellow-500 transition" onclick="switchTab('inventario')">
+                <div class="text-2xl font-bold text-yellow-500 mb-1" id="stat-pcs">—</div>
+                <div class="text-xs text-gray-500 dark:text-dark-muted">PCs Inventariados</div>
+            </div>
+            <div class="bg-white dark:bg-dark-surface rounded-xl p-4 border border-gray-200 dark:border-dark-border shadow-sm cursor-pointer hover:border-teal-500 transition" onclick="switchTab('procedimentos')">
+                <div class="text-2xl font-bold text-teal-500 mb-1" id="stat-procs">—</div>
+                <div class="text-xs text-gray-500 dark:text-dark-muted">Procedimentos</div>
+            </div>
+            <div class="bg-white dark:bg-dark-surface rounded-xl p-4 border border-gray-200 dark:border-dark-border shadow-sm" id="stat-issues-card">
+                <div class="text-2xl font-bold text-red-500 mb-1" id="stat-issues">0</div>
+                <div class="text-xs text-gray-500 dark:text-dark-muted">Alertas / Erros</div>
+            </div>
+        </div>
+
+        <!-- Info Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mb-6">
+            <!-- Informações Fiscais -->
+            <div class="bg-white dark:bg-dark-surface rounded-xl p-5 border border-gray-200 dark:border-dark-border shadow-sm">
+                <h3 class="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2 mb-4">
+                    <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                        <i class="fa-solid fa-building text-blue-500 text-xs"></i>
+                    </span>
+                    Informações Fiscais
+                </h3>
+                <div class="space-y-3">
+                    <div>
+                        <p class="text-xs text-gray-500 dark:text-dark-muted mb-1">CNPJ APMF</p>
+                        <div class="flex items-center gap-2">
+                            <code class="font-mono text-sm bg-gray-100 dark:bg-dark-border px-2 py-1 rounded text-gray-800 dark:text-gray-200 editable" contenteditable="false" data-key="cnpj-apmf">17.906.855/0001-89</code>
+                            <button onclick="copyEl(this.previousElementSibling)" class="text-gray-400 hover:text-brand-500 text-sm transition no-print"><i class="fa-solid fa-copy"></i></button>
+                        </div>
+                    </div>
+                    <div class="pt-2 border-t border-gray-100 dark:border-dark-border">
+                        <p class="text-xs text-gray-500 dark:text-dark-muted mb-1">CNPJ Conselho</p>
+                        <div class="flex items-center gap-2">
+                            <code class="font-mono text-sm bg-gray-100 dark:bg-dark-border px-2 py-1 rounded text-gray-800 dark:text-gray-200 editable" contenteditable="false" data-key="cnpj-conselho">01.122.180/0001-47</code>
+                            <button onclick="copyEl(this.previousElementSibling)" class="text-gray-400 hover:text-brand-500 text-sm transition no-print"><i class="fa-solid fa-copy"></i></button>
+                        </div>
+                    </div>
+                    <div class="pt-2 border-t border-gray-100 dark:border-dark-border">
+                        <p class="text-xs text-gray-500 dark:text-dark-muted mb-1">Observações Fiscais</p>
+                        <p class="text-sm text-gray-700 dark:text-gray-300 editable" contenteditable="false" data-key="obs-fiscal">—</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contatos Prioritários -->
+            <div class="bg-white dark:bg-dark-surface rounded-xl p-5 border border-gray-200 dark:border-dark-border shadow-sm">
+                <h3 class="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2 mb-4">
+                    <span class="w-7 h-7 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                        <i class="fa-solid fa-phone text-red-500 text-xs"></i>
+                    </span>
+                    Contatos Prioritários
+                </h3>
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center bg-gray-50 dark:bg-dark-border/40 px-3 py-2 rounded-lg">
+                        <div>
+                            <p class="text-xs text-gray-500 dark:text-dark-muted editable" contenteditable="false" data-key="contact1-label">Matheus TI</p>
+                            <p class="text-sm font-medium dark:text-gray-200 editable" contenteditable="false" data-key="contact1-phone">62 98195-1838</p>
+                        </div>
+                        <button onclick="copyEl(this.previousElementSibling.querySelector('.editable:last-child'))" class="w-7 h-7 rounded-lg bg-white dark:bg-dark-surface shadow border border-gray-100 dark:border-dark-border flex items-center justify-center text-gray-400 hover:text-brand-500 no-print"><i class="fa-solid fa-copy text-xs"></i></button>
+                    </div>
+                    <div class="flex justify-between items-center bg-gray-50 dark:bg-dark-border/40 px-3 py-2 rounded-lg">
+                        <div>
+                            <p class="text-xs text-gray-500 dark:text-dark-muted editable" contenteditable="false" data-key="contact2-label">TIM (Renato)</p>
+                            <p class="text-sm font-medium dark:text-gray-200 editable" contenteditable="false" data-key="contact2-phone">62 8247-0099</p>
+                        </div>
+                        <button onclick="copyEl(this.previousElementSibling.querySelector('.editable:last-child'))" class="w-7 h-7 rounded-lg bg-white dark:bg-dark-surface shadow border border-gray-100 dark:border-dark-border flex items-center justify-center text-gray-400 hover:text-brand-500 no-print"><i class="fa-solid fa-copy text-xs"></i></button>
+                    </div>
+                    <div class="flex justify-between items-center bg-gray-50 dark:bg-dark-border/40 px-3 py-2 rounded-lg">
+                        <div>
+                            <p class="text-xs text-gray-500 dark:text-dark-muted editable" contenteditable="false" data-key="contact3-label">Internet (IG Network)</p>
+                            <p class="text-sm font-medium dark:text-gray-200 editable" contenteditable="false" data-key="contact3-phone">62 9501-5449</p>
+                        </div>
+                        <button onclick="copyEl(this.previousElementSibling.querySelector('.editable:last-child'))" class="w-7 h-7 rounded-lg bg-white dark:bg-dark-surface shadow border border-gray-100 dark:border-dark-border flex items-center justify-center text-gray-400 hover:text-brand-500 no-print"><i class="fa-solid fa-copy text-xs"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notas & Alertas -->
+            <div class="bg-white dark:bg-dark-surface rounded-xl p-5 border border-gray-200 dark:border-dark-border shadow-sm">
+                <h3 class="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2 mb-4">
+                    <span class="w-7 h-7 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center">
+                        <i class="fa-solid fa-note-sticky text-yellow-500 text-xs"></i>
+                    </span>
+                    Notas & Alertas
+                </h3>
+                <div class="space-y-2">
+                    <div class="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800/40 rounded-lg p-3">
+                        <p class="text-xs font-semibold text-yellow-700 dark:text-yellow-400 mb-1"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Pendências de Hardware</p>
+                        <p class="text-xs text-yellow-700/80 dark:text-yellow-400/80 editable" contenteditable="false" data-key="note-hardware">5 PCs aguardando troca de HDD → SSD. DVR Intelbras Robótica com defeito no HD 1TB.</p>
+                    </div>
+                    <div class="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/40 rounded-lg p-3">
+                        <p class="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-1"><i class="fa-solid fa-circle-info mr-1"></i>Notas Gerais</p>
+                        <p class="text-xs text-blue-700/80 dark:text-blue-400/80 editable" contenteditable="false" data-key="note-general">DVR Xerox fora da rede (GW diferente). IDRAC 10.0.0.40 a configurar.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alertas de infra (automático) -->
+        <div id="issues-panel" class="hidden bg-white dark:bg-dark-surface rounded-xl p-5 border border-red-200 dark:border-red-900/40 shadow-sm mb-6">
+            <h3 class="font-semibold text-red-600 dark:text-red-400 text-sm flex items-center gap-2 mb-3">
+                <i class="fa-solid fa-triangle-exclamation"></i> Equipamentos com Atenção / Erro
+            </h3>
+            <div id="issues-list" class="space-y-1 text-xs"></div>
+        </div>
+
+        <!-- Log de atividades -->
+        <div class="bg-white dark:bg-dark-surface rounded-xl p-5 border border-gray-200 dark:border-dark-border shadow-sm">
+            <h3 class="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2 mb-4">
+                <span class="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                    <i class="fa-solid fa-clock-rotate-left text-indigo-500 text-xs"></i>
+                </span>
+                Últimas Alterações
+            </h3>
+            <div id="activity-log" class="space-y-2">
+                <p class="text-xs text-gray-400 dark:text-dark-muted italic">Nenhuma alteração registrada nesta sessão.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TAB: SERVIDORES ===== -->
+    <div id="servidores" class="tab-content">
+        <div class="flex items-center justify-between mb-5">
+            <div>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">Servidores & VMs</h2>
+                <p class="text-gray-500 dark:text-dark-muted text-sm mt-0.5">Acesso à infraestrutura principal e máquinas virtuais.</p>
+            </div>
+            <div class="flex items-center gap-2 no-print">
+                <button onclick="exportCSV('servers','servidores.csv')" class="btn btn-export"><i class="fa-solid fa-download"></i> CSV</button>
+                <button onclick="openAddModal('server')" class="btn btn-primary text-xs"><i class="fa-solid fa-plus"></i> Adicionar</button>
+            </div>
+        </div>
+        <div class="bg-white dark:bg-dark-surface rounded-xl border border-gray-200 dark:border-dark-border shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm" id="servers-table">
+                    <thead>
+                        <tr class="bg-gray-50 dark:bg-dark-border/40 border-b border-gray-100 dark:border-dark-border">
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase tracking-wider">IP</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase tracking-wider">Nome / Função</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase tracking-wider">Usuário</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase tracking-wider">Senha</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase tracking-wider">Status</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase tracking-wider">Observações</th>
+                            <th class="px-4 py-3 no-print"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="servers-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TAB: REDES ===== -->
+    <div id="redes" class="tab-content">
+        <div class="flex items-center justify-between mb-5">
+            <div>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">Redes & Wi-Fi</h2>
+                <p class="text-gray-500 dark:text-dark-muted text-sm mt-0.5">Roteadores, redes administrativas e Wi-Fi setorizado.</p>
+            </div>
+            <div class="flex gap-2 no-print">
+                <button onclick="exportCSV('sectorNetworks','wifi-setorizado.csv')" class="btn btn-export"><i class="fa-solid fa-download"></i> CSV Wi-Fi</button>
+                <button onclick="openAddModal('network')" class="btn btn-primary text-xs"><i class="fa-solid fa-plus"></i> Adicionar</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <!-- Redes Principais -->
+            <div class="bg-white dark:bg-dark-surface rounded-xl border border-gray-200 dark:border-dark-border shadow-sm overflow-hidden">
+                <div class="px-4 py-3 border-b border-gray-100 dark:border-dark-border bg-gray-50/50 dark:bg-dark-border/20 flex items-center justify-between">
+                    <h3 class="font-semibold text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-network-wired text-indigo-500"></i> Redes Principais
+                    </h3>
+                    <div class="flex gap-2 no-print">
+                        <button onclick="exportCSV('mainNetworks','redes-principais.csv')" class="btn btn-export py-1"><i class="fa-solid fa-download"></i></button>
+                        <button onclick="openAddModal('main-network')" class="text-xs text-brand-500 hover:underline"><i class="fa-solid fa-plus mr-1"></i>Adicionar</button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="bg-gray-50/50 dark:bg-dark-border/10 border-b border-gray-100 dark:border-dark-border">
+                                <th class="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 dark:text-dark-muted">Rede</th>
+                                <th class="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 dark:text-dark-muted">Usuário</th>
+                                <th class="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 dark:text-dark-muted">Senha</th>
+                                <th class="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 dark:text-dark-muted">Gateway</th>
+                                <th class="no-print px-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="main-networks-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Wi-Fi Setorizado -->
+            <div class="bg-white dark:bg-dark-surface rounded-xl border border-gray-200 dark:border-dark-border shadow-sm overflow-hidden">
+                <div class="px-4 py-3 border-b border-gray-100 dark:border-dark-border bg-gray-50/50 dark:bg-dark-border/20 flex items-center justify-between">
+                    <h3 class="font-semibold text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-wifi text-emerald-500"></i> Wi-Fi Setorizado
+                    </h3>
+                    <button onclick="openAddModal('sector-network')" class="text-xs text-brand-500 hover:underline no-print"><i class="fa-solid fa-plus mr-1"></i>Adicionar</button>
+                </div>
+                <div class="overflow-x-auto max-h-96">
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="bg-gray-50/50 dark:bg-dark-border/10 border-b border-gray-100 dark:border-dark-border">
+                                <th class="text-left px-4 py-2.5 font-semibold text-gray-500 dark:text-dark-muted">Local</th>
+                                <th class="text-left px-4 py-2.5 font-semibold text-gray-500 dark:text-dark-muted">Nome da Rede</th>
+                                <th class="text-left px-4 py-2.5 font-semibold text-gray-500 dark:text-dark-muted">Senha</th>
+                                <th class="no-print px-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="sector-networks-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TAB: SISTEMAS / CFTV ===== -->
+    <div id="sistemas" class="tab-content">
+        <div class="flex items-center justify-between mb-5">
+            <div>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">Sistemas, CFTV & Controle</h2>
+                <p class="text-gray-500 dark:text-dark-muted text-sm mt-0.5">DVRs, plataformas e controle de salas.</p>
+            </div>
+            <div class="flex gap-2 no-print">
+                <button onclick="exportCSV('dvrs','dvrs.csv')" class="btn btn-export"><i class="fa-solid fa-download"></i> CSV</button>
+                <button onclick="openAddModal('dvr')" class="btn btn-primary text-xs"><i class="fa-solid fa-plus"></i> Adicionar DVR</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+            <!-- DVRs -->
+            <div class="bg-white dark:bg-dark-surface rounded-xl border border-gray-200 dark:border-dark-border shadow-sm p-5">
+                <h3 class="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2 mb-4">
+                    <i class="fa-solid fa-camera text-blue-500"></i> DVRs na Rede
+                </h3>
+                <div class="space-y-3 max-h-[480px] overflow-y-auto pr-1" id="dvrs-container"></div>
+            </div>
+
+            <!-- Outros Sistemas -->
+            <div class="space-y-5">
+                <!-- Multi Giga -->
+                <div class="bg-white dark:bg-dark-surface rounded-xl border border-gray-200 dark:border-dark-border shadow-sm p-5">
+                    <h3 class="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2 mb-3">
+                        <i class="fa-solid fa-cloud text-indigo-500"></i> Multi Giga / GigaDDNS
+                    </h3>
+                    <div class="space-y-3">
+                        <div class="bg-gray-50 dark:bg-dark-border/30 p-3 rounded-lg">
+                            <p class="text-xs text-gray-500 dark:text-dark-muted mb-2 font-medium">Acesso App Celular</p>
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div>Usuário: <span class="font-medium text-gray-900 dark:text-gray-200 editable" contenteditable="false" data-key="multigiga-app-user">Ayrtonsenna123</span></div>
+                                <div class="flex items-center gap-1">Senha: <input type="password" value="@Ayrtonsenna123" readonly class="bg-transparent border-none p-0 w-24 text-xs"> <button onclick="togglePwd(this)"><i class="fa-solid fa-eye text-gray-400 text-xs"></i></button></div>
+                                <div class="col-span-2 text-gray-500 dark:text-dark-muted">Email: <span class="editable" contenteditable="false" data-key="multigiga-email">matheusjulio.ti@gmail.com</span></div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 dark:bg-dark-border/30 p-3 rounded-lg">
+                            <p class="text-xs text-gray-500 dark:text-dark-muted mb-2 font-medium">app.gigaddns.com.br</p>
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div>Usuário: <span class="font-medium text-gray-900 dark:text-gray-200 editable" contenteditable="false" data-key="gigaddns-user">ayrtonsenna123</span></div>
+                                <div class="flex items-center gap-1">Senha: <input type="password" value="@Ayrto123" readonly class="bg-transparent border-none p-0 w-20 text-xs"> <button onclick="togglePwd(this)"><i class="fa-solid fa-eye text-gray-400 text-xs"></i></button></div>
+                                <div class="col-span-2"><code class="text-[10px] bg-gray-100 dark:bg-dark-border px-1.5 py-0.5 rounded text-gray-700 dark:text-gray-300 block mb-1 editable" contenteditable="false" data-key="gigaddns-domain1">ayrtonsennaext.gigaddns.com.br</code>
+                                <code class="text-[10px] bg-gray-100 dark:bg-dark-border px-1.5 py-0.5 rounded text-gray-700 dark:text-gray-300 block editable" contenteditable="false" data-key="gigaddns-domain2">ayrtonsenna.gigaddns.com.br</code></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controle Salas -->
+                <div class="bg-white dark:bg-dark-surface rounded-xl border border-gray-200 dark:border-dark-border shadow-sm p-5">
+                    <h3 class="font-semibold text-gray-900 dark:text-white text-sm flex items-center gap-2 mb-3">
+                        <i class="fa-solid fa-chalkboard-user text-teal-500"></i> Controle de Salas
+                    </h3>
+                    <div class="text-xs space-y-1 mb-3 text-gray-600 dark:text-gray-400">
+                        <div><span class="font-semibold text-gray-900 dark:text-white">IVMS-4200:</span> Admin / @Ayrtonsenna</div>
+                        <div><span class="font-semibold text-gray-900 dark:text-white">NVClient:</span> admin / <em>Sem Senha</em></div>
+                        <div><span class="font-semibold text-gray-900 dark:text-white">Samba:</span> <code class="bg-gray-100 dark:bg-dark-border px-1 rounded">\\192.168.25.125</code></div>
+                    </div>
+                    <div class="overflow-x-auto rounded-lg border border-gray-100 dark:border-dark-border">
+                        <table class="w-full text-xs">
+                            <thead class="bg-gray-50 dark:bg-dark-border/30 text-gray-500 dark:text-dark-muted">
+                                <tr>
+                                    <th class="text-left px-3 py-2">Local</th>
+                                    <th class="text-left px-3 py-2">IP</th>
+                                    <th class="text-left px-3 py-2">Acesso</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100 dark:divide-dark-border text-gray-700 dark:text-gray-300" id="rooms-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TAB: INVENTÁRIO ===== -->
+    <div id="inventario" class="tab-content">
+        <div class="flex items-center justify-between mb-5">
+            <div>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">Inventário de Equipamentos</h2>
+                <p class="text-gray-500 dark:text-dark-muted text-sm mt-0.5">Estações de trabalho e status de hardware.</p>
+            </div>
+            <div class="flex gap-2 no-print">
+                <button onclick="exportCSV('pcs','inventario-pcs.csv')" class="btn btn-export"><i class="fa-solid fa-download"></i> CSV</button>
+                <button onclick="openAddModal('pc')" class="btn btn-primary text-xs"><i class="fa-solid fa-plus"></i> Adicionar PC</button>
+            </div>
+        </div>
+        <div class="bg-white dark:bg-dark-surface rounded-xl border border-gray-200 dark:border-dark-border shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="bg-gray-50 dark:bg-dark-border/40 border-b border-gray-100 dark:border-dark-border">
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase tracking-wider">Hostname / Equipamento</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase tracking-wider">Processador</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase tracking-wider">RAM</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase tracking-wider">Armazenamento</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase tracking-wider">IP</th>
+                            <th class="text-left px-4 py-3 text-xs font-semibold text-gray-500 dark:text-dark-muted uppercase tracking-wider">Status</th>
+                            <th class="px-4 py-3 no-print"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="pcs-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TAB: PROCEDIMENTOS ===== -->
+    <div id="procedimentos" class="tab-content">
+        <div class="flex items-center justify-between mb-5">
+            <div>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">Procedimentos & Base de Conhecimento</h2>
+                <p class="text-gray-500 dark:text-dark-muted text-sm mt-0.5">Guias, rotinas e troubleshooting documentados.</p>
+            </div>
+            <button onclick="openAddModal('procedure')" class="btn btn-primary text-xs no-print">
+                <i class="fa-solid fa-plus"></i> Novo Procedimento
+            </button>
+        </div>
+        <div class="space-y-4" id="procedures-container"></div>
+    </div>
+
+    <!-- ===== TAB: CONTATOS ===== -->
+    <div id="contatos" class="tab-content">
+        <div class="flex items-center justify-between mb-5">
+            <div>
+                <h2 class="text-xl font-bold text-gray-900 dark:text-white">Contatos & Emails</h2>
+                <p class="text-gray-500 dark:text-dark-muted text-sm mt-0.5">Fornecedores, parceiros e emails corporativos.</p>
+            </div>
+            <div class="flex gap-2 no-print">
+                <button onclick="exportCSV('suppliers','fornecedores.csv')" class="btn btn-export"><i class="fa-solid fa-download"></i> CSV</button>
+                <button onclick="openAddModal('contact')" class="btn btn-primary text-xs"><i class="fa-solid fa-plus"></i> Adicionar</button>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white dark:bg-dark-surface rounded-xl border border-gray-200 dark:border-dark-border shadow-sm p-5">
+                <h3 class="font-semibold text-sm text-gray-900 dark:text-white mb-4 pb-2 border-b border-gray-100 dark:border-dark-border">Serviços & Fornecedores</h3>
+                <div class="space-y-1" id="suppliers-list"></div>
+            </div>
+            <div class="bg-white dark:bg-dark-surface rounded-xl border border-gray-200 dark:border-dark-border shadow-sm p-5">
+                <div class="flex items-center justify-between mb-4 pb-2 border-b border-gray-100 dark:border-dark-border">
+                    <h3 class="font-semibold text-sm text-gray-900 dark:text-white">E-mails Corporativos</h3>
+                    <button onclick="openAddModal('email')" class="text-xs text-brand-500 hover:underline no-print"><i class="fa-solid fa-plus mr-1"></i>Adicionar</button>
+                </div>
+                <div class="space-y-2" id="emails-list"></div>
+            </div>
+        </div>
+    </div>
+
+    </div><!-- max-w -->
+    </main>
+</div>
+
+<!-- ============ MODAL ============ -->
+<div id="modal-overlay" class="fixed inset-0 bg-black/70 z-50 items-center justify-center p-4 no-print">
+    <div class="bg-white dark:bg-dark-surface rounded-2xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-dark-border">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-dark-border">
+            <h3 class="font-semibold text-gray-900 dark:text-white text-sm" id="modal-title">Adicionar</h3>
+            <button onclick="closeModal()" class="text-gray-400 hover:text-gray-700 dark:hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-6 max-h-[70vh] overflow-y-auto" id="modal-body"></div>
+        <div class="px-6 py-4 border-t border-gray-100 dark:border-dark-border flex justify-end gap-3">
+            <button onclick="closeModal()" class="btn btn-ghost text-xs">Cancelar</button>
+            <button onclick="submitModal()" class="btn btn-primary text-xs" id="modal-submit-btn">Salvar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ============ SCRIPTS ============ -->
+<script>
+// ==================== SUPABASE ====================
+const SUPABASE_URL = 'https://rohwralirtujspvtuogz.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJvaHdyYWxpcnR1anNwdnR1b2d6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYzMTc2OTUsImV4cCI6MjA5MTg5MzY5NX0.gHNblFb9FR2uKAnCTSXMWURzpzzXpaw6tG6y0IVEu20';
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ==================== DATA STORE ====================
+const DEFAULT_DATA = {
+    servers: [
+        { id: 1, ip: '192.168.25.39', name: 'SERVIDORCEPMGAS', user: 'ssh srv-arquivos', pass: 's3guranc@sdv', obs: 'c2p0g1s9', status: 'ok' },
+        { id: 2, ip: '10.0.0.38', name: 'ESXI (Hypervisor)', user: 'root', pass: 'P@ssW0rd', obs: 'Host principal VM', status: 'ok' },
+        { id: 3, ip: 'Múltiplos IPs', name: 'VMs / Windows Server', user: 'Administrator', pass: 'P@ssW0rd', obs: 'Credencial Padrão VMs', status: 'ok' },
+        { id: 4, ip: '10.0.0.39', name: 'SRVFLS01', user: '—', pass: '—', obs: 'Arquivos', status: 'ok' },
+        { id: 5, ip: '10.0.0.40', name: 'IDRAC', user: '—', pass: '—', obs: 'Configurar futuramente', status: 'warn' },
+        { id: 6, ip: '192.168.25.1', name: 'Gateway Padrão', user: '—', pass: '—', obs: '—', status: 'ok' },
+    ],
+    mainNetworks: [
+        { id: 1, name: 'APMF-ADMIN', user: 'admin', pass: 'apmf2025@', gateway: '192.168.1.1' },
+        { id: 2, name: 'APMF-GUEST', user: 'guest', pass: 'guest2025@', gateway: '192.168.1.2' },
+        { id: 3, name: 'CONSELHO', user: 'conselho', pass: 'cons2025@', gateway: '192.168.1.3' },
+        { id: 4, name: 'WFI ADM (TI)', user: 'militarapmf2025', pass: '—', gateway: '—' },
+    ],
+    sectorNetworks: [
+        { id: 1, local: 'Secretaria', ssid: 'SECRETARIA', pass: 'secretariacepmgas' },
+        { id: 2, local: 'Secretaria AS', ssid: 'SECRETARIA AS', pass: 'c2p0g1s3' },
+        { id: 3, local: 'TI', ssid: 'WFI ADM', pass: '62996775387/c2p0g1s9' },
+        { id: 4, local: 'Biblioteca', ssid: 'BIBLIOTECA', pass: 'c2p0g1s3' },
+        { id: 5, local: 'Lab. Informática', ssid: 'LABORATORIO DE INFORMATICA', pass: 'infocepmgas' },
+        { id: 6, local: 'Auditório', ssid: 'AUDITORIO', pass: 'c2p0g1s9' },
+        { id: 7, local: 'Anfiteatro', ssid: 'ANFITEATRO', pass: 'c2p0g1s9' },
+        { id: 8, local: 'Coordenação', ssid: 'COORDENACAO-AS', pass: 'c2p0g1s3' },
+        { id: 9, local: 'Disciplinar', ssid: 'DOSCIPLINAR', pass: 'sickweak011' },
+        { id: 10, local: 'Mecanografia', ssid: 'MECANOGRAFIA', pass: 'c2p0g1s3' },
+        { id: 11, local: 'Lab. Móvel 5G', ssid: 'LABORATORIO MOVEL - 5G', pass: 'c2p0g1s3' },
+        { id: 12, local: 'Banda', ssid: 'BANDA CPMGAS', pass: 'BANDACEPMG2001' },
+        { id: 13, local: 'Salas de Aula', ssid: '17 Roteadores', pass: 'c2p0g1s3' },
+    ],
+    dvrs: [
+        { id: 1, name: 'DVR GIGA - TI', ip: '192.168.25.2', gw: '192.168.25.1', user: 'admin', pass: 'Admin123', status: 'ok', obs: '500GB' },
+        { id: 2, name: 'DVR GIGA - TI', ip: '192.168.25.3', gw: '192.168.25.1', user: 'admin', pass: 'Admin123', status: 'ok', obs: '1TB' },
+        { id: 3, name: 'DVR LUXVISION - TI', ip: '192.168.25.4', gw: '192.168.25.1', user: 'admin', pass: 'Admin123', status: 'ok', obs: '1TB' },
+        { id: 4, name: 'DVR ANKO - ROBÓTICA', ip: '192.168.0.119', gw: '192.168.25.1', user: 'admin', pass: 'admin123', status: 'ok', obs: 'Camviews' },
+        { id: 5, name: 'DVR INTELBRAS - ROBÓTICA', ip: '192.168.25.6', gw: '—', user: 'admin', pass: 'Admin123', status: 'error', obs: 'DEFEITO HD 1TB - Necessário manutenção' },
+        { id: 6, name: 'DVR GIGA - XEROX', ip: '10.0.0.7', gw: '10.0.0.1', user: 'admin', pass: 'Admin123', status: 'warn', obs: 'Fora da rede - sem cabo ativo' },
+    ],
+    rooms: [
+        { id: 1, local: 'Salas de Aula', ip: '192.168.25.125', access: 'admin / admin123' },
+        { id: 2, local: 'Pátio', ip: '192.168.25.160', access: 'admin / admin123' },
+        { id: 3, local: 'Robótica (360°)', ip: '—', access: 'admin / lo0924as' },
+        { id: 4, local: 'Robótica (Intelbras)', ip: '—', access: 'PM / 454545' },
+        { id: 5, local: 'Mecanografia', ip: '—', access: 'admin / Cpmg2702' },
+    ],
+    pcs: [
+        { id: 1, host: 'Desktop-gu9evtb', cpu: 'Intel i5', ram: '8 GB', storage: 'HDD (Sem SSD)', ip: '192.168.25.88', status: 'warn' },
+        { id: 2, host: 'desktop-he5a7j4', cpu: 'Intel i5', ram: '8 GB', storage: 'HDD (Sem SSD)', ip: '192.168.25.121', status: 'warn' },
+        { id: 3, host: 'desktop-08ss4kd', cpu: 'Intel i5', ram: '8 GB', storage: 'HDD (Sem SSD)', ip: '192.168.25.103', status: 'warn' },
+        { id: 4, host: 'desktop-31al2aj', cpu: 'Intel i5', ram: '8 GB', storage: 'HDD (Sem SSD)', ip: '192.168.25.115', status: 'warn' },
+        { id: 5, host: 'Secretaria (Principal)', cpu: 'Intel i3', ram: '8 GB', storage: 'SSD Equipado', ip: '192.168.25.145', status: 'warn' },
+    ],
+    procedures: [
+        { id: 1, title: 'Adicionar câmera no DVR GIGA', content: '1. Identifique o IP do DVR na aba Sistemas / CFTV.\n2. Acesse via navegador digitando o IP.\n3. Usuário: admin. Clique no olho para ver a senha.\n4. Vá em Configurações > Câmera > Adicionar IPC.\n5. Realize varredura na rede para localizar nova câmera.' },
+        { id: 2, title: 'Troca de HD / SSD em PCs da Secretaria', content: '1. Desligar o PC e remover o HDD existente.\n2. Instalar o SSD nas conexões SATA disponíveis.\n3. Gravar Windows 11 em pendrive (Rufus).\n4. Instalar e configurar via BIOS (Boot pelo USB).\n5. Registrar equipamento atualizado no Inventário.' },
+    ],
+    suppliers: [
+        { id: 1, icon: 'fa-print', name: 'Impressoras (Digimak)', phone: '62 4009-7900', email: '' },
+        { id: 2, icon: 'fa-globe', name: 'Internet (IG Network)', phone: '62 9501-5449', email: '' },
+        { id: 3, icon: 'fa-tower-cell', name: 'Operadora TIM (Renato)', phone: '62 8247-0099', email: '' },
+        { id: 4, icon: 'fa-clock', name: 'Ponto Líder', phone: '62 8630-2691', email: '' },
+        { id: 5, icon: 'fa-laptop-code', name: 'GR8 Sistemas', phone: '62 3319-1294', email: '' },
+    ],
+    emails: [
+        { id: 1, label: 'Anairá Kiara', email: 'anairakiara1@gmail.com' },
+        { id: 2, label: 'Ariana Alves (Seduc)', email: 'ariana.alves@seduc.go.gov.br' },
+        { id: 3, label: 'APMF (Geral)', email: 'cepmgasapmf@gmail.com' },
+        { id: 4, label: 'Marcela CPMGAS', email: 'marcelacpmgas@hotmail.com' },
+        { id: 5, label: 'Matheus TI', email: 'matheusjulio.ti@gmail.com' },
+    ],
+    kvs: {},
+    log: [],
+};
+
+let DATA = JSON.parse(JSON.stringify(DEFAULT_DATA));
+let editMode = false;
+let currentModal = null;
+let idCounter = 1000;
+let saveDebounce = null;
+
+// ==================== SYNC STATUS ====================
+function setSyncStatus(status) {
+    const dot = document.getElementById('sync-dot');
+    const text = document.getElementById('sync-text');
+    const timeEl = document.getElementById('sync-time');
+    if (!dot) return;
+    const cfg = {
+        idle:    { color: '#6b7280', label: 'Pronto', cls: '' },
+        saving:  { color: '#f59e0b', label: 'Salvando…', cls: 'sync-saving' },
+        saved:   { color: '#10b981', label: 'Sincronizado ☁️', cls: '' },
+        error:   { color: '#ef4444', label: 'Erro no sync', cls: '' },
+        offline: { color: '#6b7280', label: 'Modo local (offline)', cls: '' },
+    };
+    const c = cfg[status] || cfg.idle;
+    dot.style.background = c.color;
+    dot.className = `w-2 h-2 rounded-full flex-shrink-0 transition-colors duration-300 ${c.cls}`;
+    text.textContent = c.label;
+    if (status === 'saved') {
+        timeEl.textContent = 'Último sync: ' + new Date().toLocaleTimeString('pt-BR');
+    }
+}
+
+// ==================== SAVE ====================
+async function save() {
+    setSyncStatus('saving');
+    try {
+        const { error } = await db.from('ti_data').upsert({ id: 1, data: DATA, updated_at: new Date().toISOString() });
+        if (error) throw error;
+        setSyncStatus('saved');
+    } catch (e) {
+        console.warn('Supabase save error, usando localStorage:', e.message);
+        localStorage.setItem('ti-data', JSON.stringify(DATA));
+        setSyncStatus('offline');
+    }
+}
+
+function scheduleSave() {
+    setSyncStatus('saving');
+    clearTimeout(saveDebounce);
+    saveDebounce = setTimeout(() => save(), 1200);
+}
+
+// ==================== ACTIVITY LOG ====================
+function logAction(action, detail) {
+    if (!DATA.log) DATA.log = [];
+    DATA.log.unshift({ action, detail, time: new Date().toLocaleString('pt-BR') });
+    DATA.log = DATA.log.slice(0, 20);
+    renderActivityLog();
+}
+
+function renderActivityLog() {
+    const el = document.getElementById('activity-log');
+    if (!el) return;
+    if (!DATA.log || DATA.log.length === 0) {
+        el.innerHTML = '<p class="text-xs text-gray-400 dark:text-dark-muted italic">Nenhuma alteração registrada nesta sessão.</p>';
+        return;
+    }
+    el.innerHTML = DATA.log.slice(0, 8).map(l => `
+        <div class="log-item">
+            <p class="text-xs text-gray-700 dark:text-gray-300"><span class="font-medium">${l.action}</span> — ${l.detail}</p>
+            <p class="text-[10px] text-gray-400 dark:text-dark-muted">${l.time}</p>
+        </div>
+    `).join('');
+}
+
+// ==================== EXPORT CSV ====================
+function exportCSV(arr, filename) {
+    const rows = DATA[arr];
+    if (!rows || rows.length === 0) { showToast('Sem dados para exportar.', 'warn'); return; }
+    const keys = Object.keys(rows[0]).filter(k => k !== 'id' && k !== 'icon');
+    const header = keys.join(',');
+    const body = rows.map(r => keys.map(k => `"${String(r[k] || '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + header + '\n' + body], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Exportado: ${filename}`, 'success');
+}
+
+// ==================== RENDER FUNCTIONS ====================
+function renderAll() {
+    renderServers();
+    renderMainNetworks();
+    renderSectorNetworks();
+    renderDVRs();
+    renderRooms();
+    renderPCs();
+    renderProcedures();
+    renderSuppliers();
+    renderEmails();
+    updateStats();
+    renderIssuesPanel();
+    renderActivityLog();
+}
+
+function statusBadge(s) {
+    const map = {
+        ok:    ['bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400', 'Ativo'],
+        warn:  ['bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400', 'Atenção'],
+        error: ['bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400', 'Problema'],
+    };
+    const [cls, label] = map[s] || map.ok;
+    return `<span class="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${cls}">${label}</span>`;
+}
+
+function statusSelect(arr, id, current) {
+    if (!editMode) return statusBadge(current);
+    return `<select onchange="updateStatus('${arr}',${id},this.value)" class="text-xs bg-dark-border border border-dark-border rounded px-1 py-0.5 text-dark-text outline-none">
+        <option value="ok" ${current==='ok'?'selected':''}>Ativo</option>
+        <option value="warn" ${current==='warn'?'selected':''}>Atenção</option>
+        <option value="error" ${current==='error'?'selected':''}>Problema</option>
+    </select>`;
+}
+
+function updateStatus(arr, id, val) {
+    const item = DATA[arr].find(x => x.id === id);
+    if (item) { item.status = val; scheduleSave(); renderAll(); logAction('Status atualizado', `${item.name || item.host} → ${val}`); }
+}
+
+function renderServers() {
+    const tbody = document.getElementById('servers-tbody');
+    tbody.innerHTML = DATA.servers.map(s => `
+        <tr class="border-b border-gray-100 dark:border-dark-border group">
+            <td class="px-4 py-3"><code class="font-mono text-xs text-brand-600 dark:text-brand-400 editable-inline" data-arr="servers" data-id="${s.id}" data-field="ip" contenteditable="${editMode}">${s.ip}</code></td>
+            <td class="px-4 py-3 font-medium text-gray-900 dark:text-gray-100 editable-inline" data-arr="servers" data-id="${s.id}" data-field="name" contenteditable="${editMode}">${s.name}</td>
+            <td class="px-4 py-3 text-gray-600 dark:text-gray-400 editable-inline" data-arr="servers" data-id="${s.id}" data-field="user" contenteditable="${editMode}">${s.user}</td>
+            <td class="px-4 py-3">
+                <div class="flex items-center gap-1">
+                    <input type="password" value="${escHtml(s.pass)}" readonly class="bg-transparent border-none p-0 outline-none w-24 text-sm text-gray-700 dark:text-gray-300 font-mono">
+                    <button onclick="togglePwd(this)" class="no-print"><i class="fa-solid fa-eye text-gray-400 hover:text-gray-600 text-xs"></i></button>
+                    <button onclick="editPass('servers',${s.id})" class="no-print ${editMode ? '' : 'hidden'}"><i class="fa-solid fa-pen text-brand-400 hover:text-brand-500 text-xs"></i></button>
+                    <button onclick="copyText('${escHtml(s.pass)}', this)" class="no-print text-gray-400 hover:text-brand-500 text-xs"><i class="fa-solid fa-copy"></i></button>
+                </div>
+            </td>
+            <td class="px-4 py-3">${statusSelect('servers', s.id, s.status)}</td>
+            <td class="px-4 py-3 text-gray-500 dark:text-dark-muted text-xs editable-inline" data-arr="servers" data-id="${s.id}" data-field="obs" contenteditable="${editMode}">${s.obs}</td>
+            <td class="px-4 py-3 no-print">
+                <button onclick="deleteItem('servers', ${s.id}, '${escHtml(s.name)}')" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-500 transition text-xs"><i class="fa-solid fa-trash-can"></i></button>
+            </td>
+        </tr>
+    `).join('');
+    bindInlineEdits();
+}
+
+function renderMainNetworks() {
+    const tbody = document.getElementById('main-networks-tbody');
+    tbody.innerHTML = DATA.mainNetworks.map(n => `
+        <tr class="border-b border-gray-100 dark:border-dark-border group">
+            <td class="px-4 py-3 font-medium text-gray-900 dark:text-gray-100 editable-inline" data-arr="mainNetworks" data-id="${n.id}" data-field="name" contenteditable="${editMode}">${n.name}</td>
+            <td class="px-4 py-3 text-gray-600 dark:text-gray-400 editable-inline" data-arr="mainNetworks" data-id="${n.id}" data-field="user" contenteditable="${editMode}">${n.user}</td>
+            <td class="px-4 py-3">
+                <div class="flex items-center gap-1">
+                    <input type="password" value="${escHtml(n.pass)}" readonly class="bg-transparent border-none p-0 outline-none w-20 text-sm text-gray-700 dark:text-gray-300 font-mono">
+                    <button onclick="togglePwd(this)" class="no-print"><i class="fa-solid fa-eye text-gray-400 text-xs"></i></button>
+                    <button onclick="editPass('mainNetworks',${n.id})" class="no-print ${editMode ? '' : 'hidden'}"><i class="fa-solid fa-pen text-brand-400 text-xs"></i></button>
+                    <button onclick="copyText('${escHtml(n.pass)}', this)" class="no-print text-gray-400 hover:text-brand-500 text-xs"><i class="fa-solid fa-copy"></i></button>
+                </div>
+            </td>
+            <td class="px-4 py-3 text-xs"><code class="font-mono text-gray-500 editable-inline" data-arr="mainNetworks" data-id="${n.id}" data-field="gateway" contenteditable="${editMode}">${n.gateway}</code></td>
+            <td class="px-4 py-3 no-print">
+                <button onclick="deleteItem('mainNetworks', ${n.id}, '${escHtml(n.name)}')" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-500 transition text-xs"><i class="fa-solid fa-trash-can"></i></button>
+            </td>
+        </tr>
+    `).join('');
+    bindInlineEdits();
+}
+
+function renderSectorNetworks() {
+    const tbody = document.getElementById('sector-networks-tbody');
+    tbody.innerHTML = DATA.sectorNetworks.map(n => `
+        <tr class="border-b border-gray-100 dark:border-dark-border group">
+            <td class="px-4 py-2.5 font-medium text-gray-900 dark:text-gray-100 editable-inline" data-arr="sectorNetworks" data-id="${n.id}" data-field="local" contenteditable="${editMode}">${n.local}</td>
+            <td class="px-4 py-2.5 text-gray-600 dark:text-gray-400 editable-inline" data-arr="sectorNetworks" data-id="${n.id}" data-field="ssid" contenteditable="${editMode}">${n.ssid}</td>
+            <td class="px-4 py-2.5">
+                <div class="flex items-center gap-1">
+                    <input type="password" value="${escHtml(n.pass)}" readonly class="bg-transparent border-none p-0 outline-none w-20 text-xs text-gray-700 dark:text-gray-300 font-mono">
+                    <button onclick="togglePwd(this)" class="no-print"><i class="fa-solid fa-eye text-gray-400 text-xs"></i></button>
+                    <button onclick="editPass('sectorNetworks',${n.id})" class="no-print ${editMode ? '' : 'hidden'}"><i class="fa-solid fa-pen text-brand-400 text-xs"></i></button>
+                    <button onclick="copyText('${escHtml(n.pass)}', this)" class="no-print text-gray-400 hover:text-brand-500 text-xs"><i class="fa-solid fa-copy"></i></button>
+                </div>
+            </td>
+            <td class="px-4 py-2.5 no-print">
+                <button onclick="deleteItem('sectorNetworks', ${n.id}, '${escHtml(n.ssid)}')" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-500 transition text-xs"><i class="fa-solid fa-trash-can"></i></button>
+            </td>
+        </tr>
+    `).join('');
+    bindInlineEdits();
+}
+
+function renderDVRs() {
+    const container = document.getElementById('dvrs-container');
+    container.innerHTML = DATA.dvrs.map(d => {
+        const colorMap = { ok: 'bg-gray-50 dark:bg-dark-border/20 border-gray-100 dark:border-dark-border', warn: 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800/30', error: 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800/30' };
+        const cls = colorMap[d.status] || colorMap.ok;
+        return `
+            <div class="p-3 ${cls} rounded-lg border group">
+                <div class="flex items-start justify-between mb-2">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h4 class="font-bold text-xs text-gray-900 dark:text-white editable-inline" data-arr="dvrs" data-id="${d.id}" data-field="name" contenteditable="${editMode}">${d.name}</h4>
+                        ${statusSelect('dvrs', d.id, d.status)}
+                    </div>
+                    <button onclick="deleteItem('dvrs', ${d.id}, '${escHtml(d.name)}')" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-500 transition text-xs no-print mt-0.5"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-gray-400">
+                    <div>IP: <code class="font-mono text-gray-900 dark:text-gray-200 editable-inline" data-arr="dvrs" data-id="${d.id}" data-field="ip" contenteditable="${editMode}">${d.ip}</code></div>
+                    <div>GW: <code class="font-mono text-gray-900 dark:text-gray-200 editable-inline" data-arr="dvrs" data-id="${d.id}" data-field="gw" contenteditable="${editMode}">${d.gw}</code></div>
+                    <div>User: <span class="text-gray-900 dark:text-gray-200 editable-inline" data-arr="dvrs" data-id="${d.id}" data-field="user" contenteditable="${editMode}">${d.user}</span></div>
+                    <div class="flex items-center gap-1">Psw: <input type="password" value="${escHtml(d.pass)}" readonly class="bg-transparent border-none p-0 w-14 text-xs"> <button onclick="togglePwd(this)" class="no-print"><i class="fa-solid fa-eye text-[10px] text-gray-400"></i></button><button onclick="editPass('dvrs',${d.id})" class="no-print ${editMode ? '' : 'hidden'}"><i class="fa-solid fa-pen text-brand-400 text-[10px]"></i></button></div>
+                </div>
+                <p class="text-[10px] text-gray-500 dark:text-dark-muted mt-1.5 editable-inline" data-arr="dvrs" data-id="${d.id}" data-field="obs" contenteditable="${editMode}">${d.obs}</p>
+            </div>`;
+    }).join('');
+    bindInlineEdits();
+}
+
+function renderRooms() {
+    const tbody = document.getElementById('rooms-tbody');
+    tbody.innerHTML = DATA.rooms.map(r => `
+        <tr class="group">
+            <td class="px-3 py-2 font-medium editable-inline" data-arr="rooms" data-id="${r.id}" data-field="local" contenteditable="${editMode}">${r.local}</td>
+            <td class="px-3 py-2"><a href="http://${r.ip}" target="_blank" class="text-brand-500 hover:underline editable-inline" data-arr="rooms" data-id="${r.id}" data-field="ip" contenteditable="${editMode}">${r.ip}</a></td>
+            <td class="px-3 py-2 text-gray-600 dark:text-gray-400 editable-inline" data-arr="rooms" data-id="${r.id}" data-field="access" contenteditable="${editMode}">${r.access}</td>
+        </tr>
+    `).join('');
+    bindInlineEdits();
+}
+
+function renderPCs() {
+    const tbody = document.getElementById('pcs-tbody');
+    tbody.innerHTML = DATA.pcs.map(p => `
+        <tr class="border-b border-gray-100 dark:border-dark-border group">
+            <td class="px-4 py-3 font-medium text-gray-900 dark:text-gray-100 editable-inline" data-arr="pcs" data-id="${p.id}" data-field="host" contenteditable="${editMode}">${p.host}</td>
+            <td class="px-4 py-3 text-gray-600 dark:text-gray-400 editable-inline" data-arr="pcs" data-id="${p.id}" data-field="cpu" contenteditable="${editMode}">${p.cpu}</td>
+            <td class="px-4 py-3 text-gray-600 dark:text-gray-400 editable-inline" data-arr="pcs" data-id="${p.id}" data-field="ram" contenteditable="${editMode}">${p.ram}</td>
+            <td class="px-4 py-3">
+                <span class="${p.storage.includes('SSD') && !p.storage.includes('Sem') ? 'text-emerald-500' : 'text-red-500'} text-xs font-medium editable-inline" data-arr="pcs" data-id="${p.id}" data-field="storage" contenteditable="${editMode}">${p.storage}</span>
+            </td>
+            <td class="px-4 py-3"><code class="font-mono text-xs text-gray-600 dark:text-gray-400 editable-inline" data-arr="pcs" data-id="${p.id}" data-field="ip" contenteditable="${editMode}">${p.ip}</code></td>
+            <td class="px-4 py-3">${statusSelect('pcs', p.id, p.status)}</td>
+            <td class="px-4 py-3 no-print">
+                <button onclick="deleteItem('pcs', ${p.id}, '${escHtml(p.host)}')" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-500 transition text-xs"><i class="fa-solid fa-trash-can"></i></button>
+            </td>
+        </tr>
+    `).join('');
+    bindInlineEdits();
+}
+
+function renderProcedures() {
+    const container = document.getElementById('procedures-container');
+    if (DATA.procedures.length === 0) {
+        container.innerHTML = `<div class="text-center py-16 text-gray-400 dark:text-dark-muted">
+            <i class="fa-solid fa-book-open text-3xl mb-3 block"></i>
+            <p class="text-sm">Nenhum procedimento. Clique em "Novo Procedimento" para adicionar.</p>
+        </div>`;
+        return;
+    }
+    container.innerHTML = DATA.procedures.map(p => `
+        <div class="bg-white dark:bg-dark-surface rounded-xl border border-gray-200 dark:border-dark-border shadow-sm p-5 group">
+            <div class="flex items-start justify-between mb-3">
+                <h3 class="font-bold text-gray-900 dark:text-white text-sm editable-inline" data-arr="procedures" data-id="${p.id}" data-field="title" contenteditable="${editMode}">${p.title}</h3>
+                <button onclick="deleteItem('procedures', ${p.id}, '${escHtml(p.title)}')" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-500 transition text-xs no-print ml-4 flex-shrink-0"><i class="fa-solid fa-trash-can"></i></button>
+            </div>
+            <pre class="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap leading-relaxed editable-inline font-sans" data-arr="procedures" data-id="${p.id}" data-field="content" contenteditable="${editMode}">${p.content}</pre>
+        </div>
+    `).join('');
+    bindInlineEdits();
+}
+
+function renderSuppliers() {
+    const list = document.getElementById('suppliers-list');
+    list.innerHTML = DATA.suppliers.map(s => `
+        <div class="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-50 dark:hover:bg-dark-border/30 group">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid ${s.icon} text-gray-400 w-4 text-center text-sm"></i>
+                <div>
+                    <p class="text-sm font-medium text-gray-700 dark:text-gray-300 editable-inline" data-arr="suppliers" data-id="${s.id}" data-field="name" contenteditable="${editMode}">${s.name}</p>
+                    ${s.email ? `<p class="text-xs text-gray-500 dark:text-dark-muted">${s.email}</p>` : ''}
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-sm text-gray-600 dark:text-gray-400 editable-inline" data-arr="suppliers" data-id="${s.id}" data-field="phone" contenteditable="${editMode}">${s.phone}</span>
+                <button onclick="copyText('${s.phone}', this)" class="opacity-0 group-hover:opacity-100 text-brand-500 text-xs no-print"><i class="fa-solid fa-copy"></i></button>
+                <button onclick="deleteItem('suppliers', ${s.id}, '${escHtml(s.name)}')" class="opacity-0 group-hover:opacity-100 text-red-400 text-xs no-print"><i class="fa-solid fa-trash-can"></i></button>
+            </div>
+        </div>
+    `).join('');
+    bindInlineEdits();
+}
+
+function renderEmails() {
+    const list = document.getElementById('emails-list');
+    list.innerHTML = DATA.emails.map(e => `
+        <div class="flex items-center justify-between py-2 px-3 bg-gray-50 dark:bg-dark-border/30 rounded-lg group">
+            <div>
+                <p class="text-xs text-gray-500 dark:text-dark-muted editable-inline" data-arr="emails" data-id="${e.id}" data-field="label" contenteditable="${editMode}">${e.label}</p>
+                <p class="text-sm text-gray-700 dark:text-gray-300 editable-inline" data-arr="emails" data-id="${e.id}" data-field="email" contenteditable="${editMode}">${e.email}</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="copyText('${e.email}', this)" class="opacity-0 group-hover:opacity-100 text-brand-500 text-xs no-print"><i class="fa-solid fa-copy"></i></button>
+                <button onclick="deleteItem('emails', ${e.id}, '${escHtml(e.label)}')" class="opacity-0 group-hover:opacity-100 text-red-400 text-xs no-print"><i class="fa-solid fa-trash-can"></i></button>
+            </div>
+        </div>
+    `).join('');
+    bindInlineEdits();
+}
+
+function updateStats() {
+    const issues = [...DATA.servers, ...DATA.dvrs].filter(x => x.status !== 'ok').length;
+    document.getElementById('stat-servers').textContent = DATA.servers.length;
+    document.getElementById('stat-networks').textContent = DATA.sectorNetworks.length;
+    document.getElementById('stat-dvrs').textContent = DATA.dvrs.length;
+    document.getElementById('stat-pcs').textContent = DATA.pcs.length;
+    document.getElementById('stat-procs').textContent = DATA.procedures.length;
+    document.getElementById('stat-issues').textContent = issues;
+
+    // Servidores badge
+    const badge = document.getElementById('badge-servidores');
+    const serverIssues = DATA.servers.filter(s => s.status !== 'ok').length;
+    badge.textContent = serverIssues;
+    badge.classList.toggle('hidden', serverIssues === 0);
+
+    // Issues card color
+    const card = document.getElementById('stat-issues-card');
+    if (issues > 0) {
+        card.classList.add('border-red-300', 'dark:border-red-800/50');
+    } else {
+        card.classList.remove('border-red-300', 'dark:border-red-800/50');
+        document.getElementById('stat-issues').classList.replace('text-red-500', 'text-gray-400');
+    }
+}
+
+function renderIssuesPanel() {
+    const panel = document.getElementById('issues-panel');
+    const list = document.getElementById('issues-list');
+    const issues = [
+        ...DATA.servers.filter(s => s.status !== 'ok').map(s => ({ type: 'Servidor', name: s.name, ip: s.ip, status: s.status, obs: s.obs })),
+        ...DATA.dvrs.filter(d => d.status !== 'ok').map(d => ({ type: 'DVR', name: d.name, ip: d.ip, status: d.status, obs: d.obs })),
+        ...DATA.pcs.filter(p => p.status !== 'ok').map(p => ({ type: 'PC', name: p.host, ip: p.ip, status: p.status, obs: p.storage })),
+    ];
+    if (issues.length === 0) { panel.classList.add('hidden'); return; }
+    panel.classList.remove('hidden');
+    list.innerHTML = issues.map(i => {
+        const color = i.status === 'error' ? 'text-red-600 dark:text-red-400' : 'text-yellow-600 dark:text-yellow-400';
+        return `<div class="flex items-start gap-3 py-1.5 border-b border-gray-100 dark:border-dark-border last:border-0">
+            <i class="fa-solid fa-triangle-exclamation ${color} mt-0.5 flex-shrink-0"></i>
+            <div>
+                <span class="font-semibold text-gray-800 dark:text-gray-200">[${i.type}] ${i.name}</span>
+                <span class="text-gray-500 dark:text-dark-muted"> — IP: ${i.ip} — ${i.obs}</span>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+// ==================== INLINE EDIT ====================
+function bindInlineEdits() {
+    document.querySelectorAll('.editable-inline').forEach(el => {
+        el.setAttribute('contenteditable', editMode ? 'true' : 'false');
+        el.onblur = function() {
+            const arr = this.dataset.arr;
+            const id = parseInt(this.dataset.id);
+            const field = this.dataset.field;
+            const item = DATA[arr] && DATA[arr].find(x => x.id === id);
+            if (item && item[field] !== this.innerText.trim()) {
+                item[field] = this.innerText.trim();
+                scheduleSave();
+                logAction('Campo editado', `${arr}[${id}].${field}`);
+            }
+        };
+    });
+    document.querySelectorAll('[data-key]').forEach(el => {
+        el.setAttribute('contenteditable', editMode ? 'true' : 'false');
+        el.onblur = function() {
+            if (!DATA.kvs) DATA.kvs = {};
+            const newVal = this.innerText.trim();
+            if (DATA.kvs[this.dataset.key] !== newVal) {
+                DATA.kvs[this.dataset.key] = newVal;
+                scheduleSave();
+                logAction('Info atualizada', this.dataset.key);
+            }
+        };
+    });
+}
+
+function loadKVs() {
+    const kvs = DATA.kvs || {};
+    document.querySelectorAll('[data-key]').forEach(el => {
+        if (kvs[el.dataset.key] !== undefined) el.innerText = kvs[el.dataset.key];
+    });
+}
+
+// ==================== PASSWORD EDIT ====================
+function editPass(arr, id) {
+    const item = DATA[arr].find(x => x.id === id);
+    if (!item) return;
+    const label = item.name || item.host || item.ssid || 'item';
+    const newPass = prompt(`Nova senha para "${label}":`, item.pass);
+    if (newPass !== null && newPass !== item.pass) {
+        item.pass = newPass;
+        scheduleSave();
+        renderAll();
+        logAction('Senha atualizada', label);
+        showToast('Senha atualizada!', 'success');
+    }
+}
+
+// ==================== EDIT MODE ====================
+function toggleEditMode() {
+    editMode = !editMode;
+    document.body.classList.toggle('edit-mode', editMode);
+    document.getElementById('edit-bar').classList.toggle('visible', editMode);
+    document.getElementById('edit-btn-label').textContent = editMode ? 'Editando…' : 'Editar';
+    document.getElementById('edit-toggle-btn').classList.toggle('btn-primary', editMode);
+    document.getElementById('edit-toggle-btn').classList.toggle('btn-ghost', !editMode);
+    renderAll();
+    if (editMode) showToast('Modo edição ativo. Clique em qualquer campo para editar.', 'info');
+}
+
+async function saveAllData() {
+    showToast('Salvando…', 'info');
+    await save();
+    showToast('Dados salvos no Supabase ☁️', 'success');
+    logAction('Salvo manualmente', 'Todos os dados');
+}
+
+// ==================== DELETE ====================
+function deleteItem(arr, id, name) {
+    if (!editMode) { showToast('Ative o modo edição para excluir.', 'warn'); return; }
+    if (!confirm(`Excluir "${name}"?\n\nEssa ação não pode ser desfeita.`)) return;
+    DATA[arr] = DATA[arr].filter(x => x.id !== id);
+    scheduleSave();
+    renderAll();
+    logAction('Item excluído', `${arr}: ${name}`);
+    showToast(`"${name}" removido.`, 'success');
+}
+
+// ==================== MODAL ====================
+const MODAL_CONFIGS = {
+    server: {
+        title: 'Adicionar Servidor / VM',
+        fields: [
+            { label: 'IP', key: 'ip', placeholder: '192.168.x.x' },
+            { label: 'Nome / Função', key: 'name', placeholder: 'Ex: SERVIDORCEPMGAS' },
+            { label: 'Usuário', key: 'user', placeholder: 'root' },
+            { label: 'Senha', key: 'pass', placeholder: '••••••••', type: 'password' },
+            { label: 'Observações', key: 'obs', placeholder: 'Notas adicionais' },
+            { label: 'Status', key: 'status', type: 'select', options: ['ok', 'warn', 'error'] },
+        ],
+        arr: 'servers', defaults: { ip: '', name: '', user: '—', pass: '—', obs: '—', status: 'ok' }
+    },
+    'main-network': {
+        title: 'Adicionar Rede Principal',
+        fields: [
+            { label: 'Nome da Rede (SSID)', key: 'name', placeholder: 'APMF-ADMIN' },
+            { label: 'Usuário', key: 'user', placeholder: 'admin' },
+            { label: 'Senha', key: 'pass', placeholder: '••••••••', type: 'password' },
+            { label: 'Gateway (IP)', key: 'gateway', placeholder: '192.168.1.1' },
+        ],
+        arr: 'mainNetworks', defaults: { name: '', user: '', pass: '', gateway: '' }
+    },
+    'sector-network': {
+        title: 'Adicionar Wi-Fi Setorizado',
+        fields: [
+            { label: 'Local', key: 'local', placeholder: 'Auditório' },
+            { label: 'Nome da Rede (SSID)', key: 'ssid', placeholder: 'AUDITORIO' },
+            { label: 'Senha', key: 'pass', placeholder: '••••••••', type: 'password' },
+        ],
+        arr: 'sectorNetworks', defaults: { local: '', ssid: '', pass: '' }
+    },
+    network: {
+        title: 'Adicionar Rede',
+        fields: [
+            { label: 'Local', key: 'local', placeholder: 'Auditório' },
+            { label: 'Nome da Rede (SSID)', key: 'ssid', placeholder: 'AUDITORIO' },
+            { label: 'Senha', key: 'pass', placeholder: '••••••••', type: 'password' },
+        ],
+        arr: 'sectorNetworks', defaults: { local: '', ssid: '', pass: '' }
+    },
+    dvr: {
+        title: 'Adicionar DVR',
+        fields: [
+            { label: 'Nome do DVR', key: 'name', placeholder: 'DVR GIGA - TI' },
+            { label: 'IP', key: 'ip', placeholder: '192.168.x.x' },
+            { label: 'Gateway', key: 'gw', placeholder: '192.168.25.1' },
+            { label: 'Usuário', key: 'user', placeholder: 'admin' },
+            { label: 'Senha', key: 'pass', placeholder: '••••••••', type: 'password' },
+            { label: 'Observações (Capacidade etc.)', key: 'obs', placeholder: 'Ex: 1TB' },
+            { label: 'Status', key: 'status', type: 'select', options: ['ok', 'warn', 'error'] },
+        ],
+        arr: 'dvrs', defaults: { name: '', ip: '', gw: '', user: 'admin', pass: 'Admin123', obs: '', status: 'ok' }
+    },
+    pc: {
+        title: 'Adicionar Estação de Trabalho',
+        fields: [
+            { label: 'Hostname / Nome', key: 'host', placeholder: 'desktop-XXXXXXXX' },
+            { label: 'Processador', key: 'cpu', placeholder: 'Intel i5' },
+            { label: 'RAM', key: 'ram', placeholder: '8 GB' },
+            { label: 'Armazenamento', key: 'storage', placeholder: 'SSD 480GB' },
+            { label: 'Endereço IP', key: 'ip', placeholder: '192.168.25.x' },
+            { label: 'Status', key: 'status', type: 'select', options: ['ok', 'warn', 'error'] },
+        ],
+        arr: 'pcs', defaults: { host: '', cpu: '', ram: '', storage: '', ip: '', status: 'ok' }
+    },
+    procedure: {
+        title: 'Novo Procedimento',
+        fields: [
+            { label: 'Título', key: 'title', placeholder: 'Ex: Como reiniciar o servidor' },
+            { label: 'Conteúdo (passo a passo)', key: 'content', placeholder: '1. Passo um\n2. Passo dois', type: 'textarea' },
+        ],
+        arr: 'procedures', defaults: { title: '', content: '' }
+    },
+    contact: {
+        title: 'Adicionar Fornecedor / Contato',
+        fields: [
+            { label: 'Nome', key: 'name', placeholder: 'Empresa ou Pessoa' },
+            { label: 'Telefone', key: 'phone', placeholder: '62 9xxxx-xxxx' },
+            { label: 'Email', key: 'email', placeholder: 'contato@empresa.com' },
+        ],
+        arr: 'suppliers', defaults: { icon: 'fa-building', name: '', phone: '', email: '' }
+    },
+    email: {
+        title: 'Adicionar E-mail',
+        fields: [
+            { label: 'Nome / Label', key: 'label', placeholder: 'Nome da pessoa' },
+            { label: 'Endereço de E-mail', key: 'email', placeholder: 'email@dominio.com' },
+        ],
+        arr: 'emails', defaults: { label: '', email: '' }
+    },
+};
+
+function openAddModal(type) {
+    if (!editMode) toggleEditMode();
+    const cfg = MODAL_CONFIGS[type];
+    if (!cfg) return;
+    currentModal = { type, cfg };
+    document.getElementById('modal-title').textContent = cfg.title;
+    document.getElementById('modal-body').innerHTML = cfg.fields.map(f => {
+        if (f.type === 'select') return `<div class="mb-4">
+            <label class="block text-xs font-medium text-gray-500 dark:text-dark-muted mb-1.5">${f.label}</label>
+            <select id="mf-${f.key}" class="input-field">
+                ${f.options.map(o => `<option value="${o}">${o.charAt(0).toUpperCase()+o.slice(1)}</option>`).join('')}
+            </select></div>`;
+        if (f.type === 'textarea') return `<div class="mb-4">
+            <label class="block text-xs font-medium text-gray-500 dark:text-dark-muted mb-1.5">${f.label}</label>
+            <textarea id="mf-${f.key}" rows="5" placeholder="${f.placeholder||''}" class="input-field resize-none"></textarea></div>`;
+        return `<div class="mb-4">
+            <label class="block text-xs font-medium text-gray-500 dark:text-dark-muted mb-1.5">${f.label}</label>
+            <input id="mf-${f.key}" type="${f.type||'text'}" placeholder="${f.placeholder||''}" class="input-field"></div>`;
+    }).join('');
+    document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('open');
+    currentModal = null;
+}
+
+function submitModal() {
+    if (!currentModal) return;
+    const { cfg } = currentModal;
+    const newItem = { ...cfg.defaults, id: ++idCounter };
+    cfg.fields.forEach(f => {
+        const el = document.getElementById('mf-' + f.key);
+        if (el) newItem[f.key] = el.value.trim() || cfg.defaults[f.key] || '';
+    });
+    DATA[cfg.arr].push(newItem);
+    scheduleSave();
+    renderAll();
+    closeModal();
+    logAction('Item adicionado', `${cfg.arr}: ${newItem.name || newItem.host || newItem.ssid || newItem.title || newItem.label || ''}`);
+    showToast('Item adicionado com sucesso!', 'success');
+}
+
+// ==================== UI HELPERS ====================
+function toggleSidebar() {
+    document.getElementById('sidebar').classList.toggle('-translate-x-full');
+    document.getElementById('mobile-overlay').classList.toggle('hidden');
+}
+
+function switchTab(tabId) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('nav-active'));
+    document.getElementById(tabId).classList.add('active');
+    const btn = document.getElementById('nav-' + tabId);
+    if (btn) btn.classList.add('nav-active');
+    if (window.innerWidth < 1024) toggleSidebar();
+}
+
+function toggleDarkMode() {
+    const html = document.documentElement;
+    const icon = document.getElementById('theme-icon');
+    html.classList.toggle('dark');
+    icon.className = html.classList.contains('dark') ? 'fa-solid fa-moon text-sm' : 'fa-solid fa-sun text-sm';
+    localStorage.setItem('dark-mode', html.classList.contains('dark') ? '1' : '0');
+}
+
+function togglePwd(btn) {
+    const input = btn.parentElement.querySelector('input');
+    const icon = btn.querySelector('i');
+    if (!input) return;
+    input.type = input.type === 'password' ? 'text' : 'password';
+    icon.className = icon.className.replace(input.type === 'text' ? 'fa-eye' : 'fa-eye-slash', input.type === 'text' ? 'fa-eye-slash' : 'fa-eye');
+}
+
+function copyText(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+        const icon = btn && btn.querySelector('i');
+        const orig = icon ? icon.className : '';
+        if (icon) icon.className = 'fa-solid fa-check text-emerald-500';
+        showToast('Copiado!', 'success');
+        setTimeout(() => { if (icon) icon.className = orig; }, 1500);
+    });
+}
+
+function copyEl(el) {
+    if (!el) return;
+    copyText(el.innerText.trim(), null);
+}
+
+function escHtml(str) {
+    return String(str).replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
+}
+
+// ==================== SEARCH ====================
+function globalSearch(query) {
+    const countEl = document.getElementById('search-count');
+    if (!query.trim()) {
+        document.querySelectorAll('#servers-tbody tr, #main-networks-tbody tr, #sector-networks-tbody tr, #pcs-tbody tr').forEach(el => el.style.opacity = '');
+        countEl.classList.add('hidden');
+        return;
+    }
+    const q = query.toLowerCase();
+    let total = 0;
+    document.querySelectorAll('#servers-tbody tr, #main-networks-tbody tr, #sector-networks-tbody tr, #pcs-tbody tr').forEach(row => {
+        const match = row.textContent.toLowerCase().includes(q);
+        row.style.opacity = match ? '1' : '0.15';
+        if (match) total++;
+    });
+    countEl.textContent = `${total} resultado(s)`;
+    countEl.classList.toggle('hidden', total === 0);
+}
+
+// ==================== PRINT ====================
+function printPage() {
+    document.querySelectorAll('input[type="password"]').forEach(inp => { inp.setAttribute('data-type', 'password'); inp.type = 'text'; });
+    document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'block');
+    window.print();
+    setTimeout(() => {
+        document.querySelectorAll('input[data-type="password"]').forEach(inp => { inp.type = 'password'; inp.removeAttribute('data-type'); });
+        document.querySelectorAll('.tab-content').forEach(el => el.style.display = '');
+        document.querySelectorAll('.tab-content.active').forEach(el => el.style.display = 'block');
+    }, 500);
+}
+
+// ==================== TOAST ====================
+function showToast(msg, type = 'info') {
+    const icons = { success: 'fa-circle-check', warn: 'fa-triangle-exclamation', info: 'fa-circle-info', error: 'fa-circle-xmark' };
+    const colors = { success: 'bg-emerald-600', warn: 'bg-yellow-500', info: 'bg-brand-600', error: 'bg-red-600' };
+    const t = document.createElement('div');
+    t.className = `fixed top-4 right-4 z-[999] text-white text-sm font-medium px-4 py-2.5 rounded-xl shadow-xl ${colors[type]} transition-all duration-300 flex items-center gap-2`;
+    t.innerHTML = `<i class="fa-solid ${icons[type]}"></i>${msg}`;
+    document.body.appendChild(t);
+    t.animate([{ opacity: 0, transform: 'translateX(20px)' }, { opacity: 1, transform: 'translateX(0)' }], { duration: 200, fill: 'forwards' });
+    setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(20px)'; setTimeout(() => t.remove(), 300); }, 2800);
+}
+
+// ==================== KEYBOARD ====================
+document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (editMode) saveAllData();
+        else showToast('Ative o modo edição para salvar alterações.', 'info');
+    }
+    if (e.key === 'Escape' && currentModal) closeModal();
+});
+
+// ==================== INIT ====================
+document.addEventListener('DOMContentLoaded', async () => {
+    // Dark mode preference
+    const dm = localStorage.getItem('dark-mode');
+    if (dm === '0') { document.documentElement.classList.remove('dark'); document.getElementById('theme-icon').className = 'fa-solid fa-sun text-sm'; }
+
+    // Loading overlay
+    const loadingEl = document.createElement('div');
+    loadingEl.style.cssText = 'position:fixed;inset:0;background:rgba(11,17,32,0.94);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px';
+    loadingEl.innerHTML = '<div style="width:44px;height:44px;border:3px solid #1e2d45;border-top-color:#3b82f6;border-radius:50%;animation:spin 0.8s linear infinite"></div>' +
+        '<p style="color:#8899b4;font-size:14px;font-family:Inter,sans-serif">Carregando dados da nuvem…</p>' +
+        '<style>@keyframes spin{to{transform:rotate(360deg)}}<\/style>';
+    document.body.appendChild(loadingEl);
+
+    try {
+        const { data, error } = await db.from('ti_data').select('data').eq('id', 1).maybeSingle();
+        if (data && data.data && Object.keys(data.data).length > 0) {
+            DATA = data.data;
+            Object.keys(DEFAULT_DATA).forEach(k => { if (!DATA[k]) DATA[k] = JSON.parse(JSON.stringify(DEFAULT_DATA[k])); });
+            const allIds = ['servers','mainNetworks','sectorNetworks','dvrs','rooms','pcs','procedures','suppliers','emails']
+                .flatMap(k => (DATA[k] || []).map(x => x.id || 0));
+            if (allIds.length > 0) idCounter = Math.max(1000, ...allIds);
+            setSyncStatus('saved');
+        } else if (error) {
+            console.warn('Supabase error:', error.message);
+            setSyncStatus('offline');
+        } else {
+            setSyncStatus('idle');
+        }
+    } catch (e) {
+        console.warn('Supabase indisponível, usando localStorage.', e);
+        const local = localStorage.getItem('ti-data');
+        if (local) try { DATA = JSON.parse(local); } catch(_) {}
+        setSyncStatus('offline');
+    }
+
+    loadingEl.remove();
+    renderAll();
+    loadKVs();
+
+    // Prevent editing outside edit mode
+    document.addEventListener('focus', e => {
+        if (e.target && e.target.getAttribute('contenteditable') === 'true' && !editMode) e.target.blur();
+    }, true);
+
+    // Close modal on backdrop click
+    document.getElementById('modal-overlay').addEventListener('click', e => {
+        if (e.target === document.getElementById('modal-overlay')) closeModal();
+    });
+});
+</script>
+</body>
+</html>
