@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gerência de TI — APMF / CPMGAS</title>
     <meta name="description" content="Sistema de gerenciamento de informações de TI — APMF / CPMGAS. Servidores, redes, CFTV, inventário e procedimentos.">
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#0b1120">
+    <link rel="apple-touch-icon" href="./icon.svg">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -1433,6 +1436,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (e.target === document.getElementById('modal-overlay')) closeModal();
     });
 });
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('Service Worker registrado:', reg.scope))
+            .catch(err => console.error('Erro no Service Worker:', err));
+    });
+}
 </script>
 </body>
 </html>

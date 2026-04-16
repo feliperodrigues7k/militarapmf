@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#0b1120" />
+  <!-- Simple logo: Server Rack icon or general IT symbol -->
+  <rect x="128" y="96" width="256" height="320" rx="16" fill="#151f32" stroke="#3b82f6" stroke-width="12" />
+  
+  <rect x="160" y="140" width="192" height="48" rx="8" fill="#1e2d45" />
+  <circle cx="184" cy="164" r="8" fill="#10b981" />
+  <circle cx="216" cy="164" r="8" fill="#f59e0b" />
+  <rect x="256" y="160" width="80" height="8" rx="4" fill="#3b82f6" opacity="0.8" />
+
+  <rect x="160" y="232" width="192" height="48" rx="8" fill="#1e2d45" />
+  <circle cx="184" cy="256" r="8" fill="#10b981" />
+  <circle cx="216" cy="256" r="8" fill="#8899b4" />
+  <rect x="256" y="252" width="80" height="8" rx="4" fill="#3b82f6" opacity="0.8" />
+
+  <rect x="160" y="324" width="192" height="48" rx="8" fill="#1e2d45" />
+  <circle cx="184" cy="348" r="8" fill="#10b981" />
+  <circle cx="216" cy="348" r="8" fill="#f59e0b" />
+  <rect x="256" y="344" width="80" height="8" rx="4" fill="#3b82f6" opacity="0.8" />
+</svg>
